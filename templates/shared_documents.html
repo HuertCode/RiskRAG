@@ -1,0 +1,254 @@
+{% extends "private_documents.html" %}
+
+{% block title %}Shared Documents - RISK Knowledge Base{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">Shared Documents</h1>
+        <button class="btn btn-primary" onclick="showNoteForm()">
+            <span class="material-icons">add</span>
+            New Shared Note
+        </button>
+    </div>
+
+    <!-- Upload Area -->
+    <div class="upload-area" onclick="document.getElementById('fileInput').click()" 
+         ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+        <div class="upload-icon material-icons">cloud_upload</div>
+        <div class="upload-text">Share documents with the entire organization</div>
+        <div class="upload-subtext">Supports PDF, DOC, DOCX, TXT, MD files (max 16MB)</div>
+        <input type="file" id="fileInput" class="file-input" multiple accept=".pdf,.doc,.docx,.txt,.md" onchange="uploadFiles(this.files)">
+    </div>
+
+    <div class="progress-bar hidden" id="uploadProgress">
+        <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <!-- Note Form -->
+    <div class="note-form hidden" id="noteForm">
+        <div class="form-row">
+            <input type="text" id="noteTitle" class="form-input" placeholder="Shared note title" style="flex: 1;">
+            <button class="btn btn-primary" onclick="saveNote()">Share Note</button>
+            <button class="btn btn-secondary" onclick="hideNoteForm()">Cancel</button>
+        </div>
+        <textarea id="noteContent" class="form-input form-textarea" placeholder="Write your shared note here..." rows="6"></textarea>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('documents')">Shared Documents</button>
+        <button class="tab" onclick="switchTab('notes')">Shared Notes</button>
+    </div>
+
+    <!-- Documents Tab -->
+    <div class="tab-content active" id="documentsTab">
+        <div class="documents-grid" id="documentsGrid">
+            {% if documents %}
+                {% for doc in documents %}
+                <div class="document-card" onclick="viewDocument({{ doc.id }})">
+                    <div class="document-header">
+                        <div style="display: flex; align-items: center; flex: 1; min-width: 0;">
+                            <span class="document-icon material-icons">description</span>
+                            <span class="document-title">{{ doc.original_filename }}</span>
+                        </div>
+                        <div class="document-menu">
+                            <button class="document-menu-btn" onclick="event.stopPropagation(); toggleDocumentMenu(this)">
+                                <span class="material-icons">more_vert</span>
+                            </button>
+                            <div class="document-menu-content">
+                                <div class="document-menu-item" onclick="event.stopPropagation(); viewDocument({{ doc.id }})">View</div>
+                                <div class="document-menu-item" onclick="event.stopPropagation(); downloadDocument({{ doc.id }})">Download</div>
+                                {% if doc.user_id == current_user.id or current_user.is_admin %}
+                                <div class="document-menu-item danger" onclick="event.stopPropagation(); deleteDocument({{ doc.id }})">Delete</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="document-meta">
+                        Shared by {{ doc.user.username }} on {{ doc.created_at.strftime('%b %d, %Y at %I:%M %p') }}
+                    </div>
+                    <div class="document-preview">
+                        {{ doc.content[:200] }}{% if doc.content|length > 200 %}...{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <div class="material-icons">folder_shared</div>
+                    <h3>No shared documents yet</h3>
+                    <p>Be the first to share a document with the organization</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Notes Tab -->
+    <div class="tab-content" id="notesTab">
+        <div class="documents-grid" id="notesGrid">
+            {% if notes %}
+                {% for note in notes %}
+                <div class="document-card" onclick="{% if note.user_id == current_user.id or current_user.is_admin %}editNote({{ note.id }}, '{{ note.title }}', {{ note.content|tojson }}){% endif %}">
+                    <div class="document-header">
+                        <div style="display: flex; align-items: center; flex: 1; min-width: 0;">
+                            <span class="document-icon material-icons">note</span>
+                            <span class="document-title">{{ note.title }}</span>
+                        </div>
+                        <div class="document-menu">
+                            <button class="document-menu-btn" onclick="event.stopPropagation(); toggleDocumentMenu(this)">
+                                <span class="material-icons">more_vert</span>
+                            </button>
+                            <div class="document-menu-content">
+                                {% if note.user_id == current_user.id or current_user.is_admin %}
+                                <div class="document-menu-item" onclick="event.stopPropagation(); editNote({{ note.id }}, '{{ note.title }}', {{ note.content|tojson }})">Edit</div>
+                                <div class="document-menu-item danger" onclick="event.stopPropagation(); deleteNote({{ note.id }})">Delete</div>
+                                {% else %}
+                                <div class="document-menu-item" onclick="event.stopPropagation(); viewNote({{ note.id }}, '{{ note.title }}', {{ note.content|tojson }})">View</div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="document-meta">
+                        {% if note.updated_at != note.created_at %}
+                            Updated by {{ note.user.username }} on {{ note.updated_at.strftime('%b %d, %Y at %I:%M %p') }}
+                        {% else %}
+                            Shared by {{ note.user.username }} on {{ note.created_at.strftime('%b %d, %Y at %I:%M %p') }}
+                        {% endif %}
+                    </div>
+                    <div class="document-preview">
+                        {{ note.content[:200] }}{% if note.content|length > 200 %}...{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <div class="material-icons">note_add</div>
+                    <h3>No shared notes yet</h3>
+                    <p>Create the first shared note for the organization</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Note View Modal for read-only access -->
+<div class="modal" id="noteViewModal">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeNoteViewModal()">&times;</button>
+        <h2 id="noteViewTitle"></h2>
+        <div id="noteViewContent" style="white-space: pre-wrap; margin-top: 16px; line-height: 1.6;"></div>
+    </div>
+</div>
+
+<!-- Document View Modal -->
+<div class="modal" id="documentModal">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <div id="documentContent"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+// Override functions for shared documents behavior
+
+function uploadFiles(files) {
+    if (files.length === 0) return;
+    
+    const progressBar = document.getElementById('uploadProgress');
+    const progressFill = document.getElementById('progressFill');
+    
+    progressBar.classList.remove('hidden');
+    progressFill.style.width = '0%';
+    
+    const formData = new FormData();
+    
+    for (let file of files) {
+        formData.append('file', file);
+    }
+    formData.append('is_shared', 'true'); // Set to shared
+    
+    fetch('/upload_document', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressFill.style.width = '100%';
+        setTimeout(() => {
+            progressBar.classList.add('hidden');
+            if (data.error) {
+                showAlert(data.error, 'error');
+            } else {
+                showAlert(data.message, 'success');
+                location.reload();
+            }
+        }, 500);
+    })
+    .catch(error => {
+        progressBar.classList.add('hidden');
+        showAlert('Upload failed: ' + error.message, 'error');
+    });
+}
+
+function saveNote() {
+    const title = document.getElementById('noteTitle').value.trim();
+    const content = document.getElementById('noteContent').value.trim();
+    
+    if (!title || !content) {
+        showAlert('Please fill in both title and content', 'error');
+        return;
+    }
+    
+    const data = {
+        title: title,
+        content: content,
+        is_shared: true // Set to shared
+    };
+    
+    if (currentNoteId) {
+        data.note_id = currentNoteId;
+    }
+    
+    fetch('/save_note', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showAlert(data.error, 'error');
+        } else {
+            showAlert(data.message, 'success');
+            hideNoteForm();
+            location.reload();
+        }
+    })
+    .catch(error => {
+        showAlert('Failed to save note: ' + error.message, 'error');
+    });
+}
+
+function viewNote(noteId, title, content) {
+    document.getElementById('noteViewTitle').textContent = title;
+    document.getElementById('noteViewContent').textContent = content;
+    document.getElementById('noteViewModal').classList.add('show');
+}
+
+function closeNoteViewModal() {
+    document.getElementById('noteViewModal').classList.remove('show');
+}
+
+// Close note view modal when clicking outside
+document.getElementById('noteViewModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeNoteViewModal();
+    }
+});
+</script>
+{% endblock %}
