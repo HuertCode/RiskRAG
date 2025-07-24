@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}{{ document.original_filename }} - RISK Knowledge Base{% endblock %}
+
+{% block extra_css %}
+<style>
+    .document-viewer {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+
+    .document-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 24px;
+        padding-bottom: 16px;
+        border-bottom: 1px solid #e8eaed;
+    }
+
+    .document-info h1 {
+        font-size: 24px;
+        font-weight: 500;
+        color: #202124;
+        margin-bottom: 8px;
+    }
+
+    .document-meta {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        font-size: 14px;
+        color: #5f6368;
+    }
+
+    .document-meta-item {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .document-actions {
+        display: flex;
+        gap: 12px;
+    }
+
+    .document-content {
+        background: white;
+        border-radius: 8px;
+        padding: 32px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        line-height: 1.8;
+        font-size: 16px;
+        color: #202124;
+    }
+
+    .document-content h1,
+    .document-content h2,
+    .document-content h3,
+    .document-content h4,
+    .document-content h5,
+    .document-content h6 {
+        margin-top: 24px;
+        margin-bottom: 16px;
+        color: #202124;
+    }
+
+    .document-content h1 {
+        font-size: 28px;
+        font-weight: 500;
+    }
+
+    .document-content h2 {
+        font-size: 24px;
+        font-weight: 500;
+    }
+
+    .document-content h3 {
+        font-size: 20px;
+        font-weight: 500;
+    }
+
+    .document-content p {
+        margin-bottom: 16px;
+    }
+
+    .document-content ul,
+    .document-content ol {
+        margin-left: 24px;
+        margin-bottom: 16px;
+    }
+
+    .document-content li {
+        margin-bottom: 8px;
+    }
+
+    .document-content blockquote {
+        border-left: 4px solid #1a73e8;
+        background: #f8f9fa;
+        padding: 16px 20px;
+        margin: 16px 0;
+        font-style: italic;
+    }
+
+    .document-content code {
+        background: #f8f9fa;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-family: 'Courier New', monospace;
+        font-size: 14px;
+    }
+
+    .document-content pre {
+        background: #f8f9fa;
+        padding: 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+        margin: 16px 0;
+    }
+
+    .document-content pre code {
+        background: none;
+        padding: 0;
+    }
+
+    .document-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+    }
+
+    .document-content th,
+    .document-content td {
+        border: 1px solid #e8eaed;
+        padding: 12px;
+        text-align: left;
+    }
+
+    .document-content th {
+        background: #f8f9fa;
+        font-weight: 500;
+    }
+
+    .document-content img {
+        max-width: 100%;
+        height: auto;
+        border-radius: 8px;
+        margin: 16px 0;
+    }
+
+    .breadcrumb {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 24px;
+        font-size: 14px;
+        color: #5f6368;
+    }
+
+    .breadcrumb a {
+        color: #1a73e8;
+        text-decoration: none;
+    }
+
+    .breadcrumb a:hover {
+        text-decoration: underline;
+    }
+
+    .breadcrumb-separator {
+        color: #dadce0;
+    }
+
+    .back-button {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #1a73e8;
+        text-decoration: none;
+        font-weight: 500;
+        margin-bottom: 24px;
+        transition: color 0.2s ease;
+    }
+
+    .back-button:hover {
+        color: #1557b0;
+    }
+
+    .document-empty {
+        text-align: center;
+        padding: 60px 20px;
+        color: #5f6368;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+
+    .document-empty .material-icons {
+        font-size: 72px;
+        color: #dadce0;
+        margin-bottom: 16px;
+    }
+
+    .sharing-info {
+        background: #e8f0fe;
+        border: 1px solid #d2e3fc;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 24px;
+        font-size: 14px;
+        color: #1a73e8;
+    }
+
+    .sharing-info .material-icons {
+        vertical-align: middle;
+        margin-right: 8px;
+        font-size: 18px;
+    }
+
+    @media print {
+        .document-header,
+        .breadcrumb,
+        .back-button,
+        .sharing-info {
+            display: none;
+        }
+
+        .document-content {
+            box-shadow: none;
+            padding: 0;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="document-viewer">
+    <!-- Breadcrumb -->
+    <div class="breadcrumb">
+        <a href="{{ url_for('private_documents') if not document.is_shared else url_for('shared_documents') }}">
+            {{ 'Private Documents' if not document.is_shared else 'Shared Documents' }}
+        </a>
+        <span class="breadcrumb-separator">›</span>
+        <span>{{ document.original_filename }}</span>
+    </div>
+
+    <!-- Back Button -->
+    <a href="{{ url_for('private_documents') if not document.is_shared else url_for('shared_documents') }}" class="back-button">
+        <span class="material-icons">arrow_back</span>
+        Back to {{ 'Private Documents' if not document.is_shared else 'Shared Documents' }}
+    </a>
+
+    {% if document.is_shared %}
+    <div class="sharing-info">
+        <span class="material-icons">share</span>
+        This document is shared with the entire organization
+    </div>
+    {% endif %}
+
+    <!-- Document Header -->
+    <div class="document-header">
+        <div class="document-info">
+            <h1>{{ document.original_filename }}</h1>
+            <div class="document-meta">
+                <div class="document-meta-item">
+                    <span class="material-icons" style="font-size: 16px;">person</span>
+                    {{ document.user.username }}
+                </div>
+                <div class="document-meta-item">
+                    <span class="material-icons" style="font-size: 16px;">schedule</span>
+                    {{ document.created_at.strftime('%B %d, %Y at %I:%M %p') }}
+                </div>
+                {% if document.updated_at != document.created_at %}
+                <div class="document-meta-item">
+                    <span class="material-icons" style="font-size: 16px;">update</span>
+                    Updated {{ document.updated_at.strftime('%B %d, %Y at %I:%M %p') }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="document-actions">
+            <a href="{{ url_for('download_document', doc_id=document.id) }}" class="btn btn-secondary">
+                <span class="material-icons">download</span>
+                Download
+            </a>
+            <button class="btn btn-secondary" onclick="window.print()">
+                <span class="material-icons">print</span>
+                Print
+            </button>
+        </div>
+    </div>
+
+    <!-- Document Content -->
+    {% if document.content %}
+    <div class="document-content">
+        {{ document.content|safe }}
+    </div>
+    {% else %}
+    <div class="document-empty">
+        <div class="material-icons">description</div>
+        <h3>No Content</h3>
+        <p>This document appears to be empty or the content could not be extracted.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Add syntax highlighting for code blocks if needed
+document.addEventListener('DOMContentLoaded', function() {
+    // Format whitespace in pre-formatted text
+    const preElements = document.querySelectorAll('.document-content pre');
+    preElements.forEach(pre => {
+        pre.style.whiteSpace = 'pre-wrap';
+        pre.style.wordWrap = 'break-word';
+    });
+    
+    // Make external links open in new tab
+    const links = document.querySelectorAll('.document-content a[href^="http"]');
+    links.forEach(link => {
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+    });
+});
+
+// Keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    // Ctrl/Cmd + P for print
+    if ((e.ctrlKey || e.metaKey) && e.key === 'p') {
+        e.preventDefault();
+        window.print();
+    }
+    
+    // ESC to go back
+    if (e.key === 'Escape') {
+        const backButton = document.querySelector('.back-button');
+        if (backButton) {
+            window.location.href = backButton.href;
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,624 @@
+{% extends "base.html" %}
+
+{% block title %}Private Documents - RISK Knowledge Base{% endblock %}
+
+{% block extra_css %}
+<style>
+    .upload-area {
+        border: 2px dashed #dadce0;
+        border-radius: 8px;
+        padding: 40px 20px;
+        text-align: center;
+        background: #fafafa;
+        margin-bottom: 24px;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+
+    .upload-area:hover {
+        border-color: #1a73e8;
+        background: #f8f9fa;
+    }
+
+    .upload-area.dragover {
+        border-color: #1a73e8;
+        background: #e8f0fe;
+    }
+
+    .upload-icon {
+        font-size: 48px;
+        color: #5f6368;
+        margin-bottom: 16px;
+    }
+
+    .upload-text {
+        font-size: 18px;
+        color: #3c4043;
+        margin-bottom: 8px;
+    }
+
+    .upload-subtext {
+        font-size: 14px;
+        color: #5f6368;
+    }
+
+    .file-input {
+        display: none;
+    }
+
+    .tabs {
+        display: flex;
+        border-bottom: 1px solid #e8eaed;
+        margin-bottom: 24px;
+    }
+
+    .tab {
+        padding: 12px 24px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #5f6368;
+        font-weight: 500;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s ease;
+    }
+
+    .tab.active {
+        color: #1a73e8;
+        border-bottom-color: #1a73e8;
+    }
+
+    .tab:hover {
+        color: #1a73e8;
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    .documents-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+    }
+
+    .document-card {
+        background: white;
+        border: 1px solid #e8eaed;
+        border-radius: 8px;
+        padding: 16px;
+        transition: all 0.2s ease;
+        cursor: pointer;
+    }
+
+    .document-card:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        border-color: #dadce0;
+    }
+
+    .document-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+
+    .document-icon {
+        font-size: 24px;
+        color: #1a73e8;
+        margin-right: 12px;
+    }
+
+    .document-title {
+        font-weight: 500;
+        color: #202124;
+        font-size: 16px;
+        flex: 1;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .document-menu {
+        position: relative;
+    }
+
+    .document-menu-btn {
+        background: none;
+        border: none;
+        color: #5f6368;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        transition: background 0.2s ease;
+    }
+
+    .document-menu-btn:hover {
+        background: #f1f3f4;
+    }
+
+    .document-menu-content {
+        display: none;
+        position: absolute;
+        right: 0;
+        top: 100%;
+        background: white;
+        border: 1px solid #dadce0;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        z-index: 10;
+        min-width: 120px;
+    }
+
+    .document-menu.open .document-menu-content {
+        display: block;
+    }
+
+    .document-menu-item {
+        padding: 8px 16px;
+        cursor: pointer;
+        color: #202124;
+        font-size: 14px;
+        transition: background 0.2s ease;
+    }
+
+    .document-menu-item:hover {
+        background: #f8f9fa;
+    }
+
+    .document-menu-item.danger {
+        color: #ea4335;
+    }
+
+    .document-meta {
+        font-size: 12px;
+        color: #5f6368;
+        margin-bottom: 8px;
+    }
+
+    .document-preview {
+        font-size: 14px;
+        color: #3c4043;
+        line-height: 1.4;
+        max-height: 60px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+    }
+
+    .note-form {
+        background: white;
+        border: 1px solid #e8eaed;
+        border-radius: 8px;
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .note-form.hidden {
+        display: none;
+    }
+
+    .form-row {
+        display: flex;
+        gap: 16px;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal.show {
+        display: flex;
+    }
+
+    .modal-content {
+        background: white;
+        border-radius: 8px;
+        padding: 24px;
+        max-width: 800px;
+        max-height: 80vh;
+        overflow-y: auto;
+        margin: 20px;
+        position: relative;
+    }
+
+    .modal-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #5f6368;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #5f6368;
+    }
+
+    .empty-state .material-icons {
+        font-size: 72px;
+        color: #dadce0;
+        margin-bottom: 16px;
+    }
+
+    .progress-bar {
+        width: 100%;
+        height: 4px;
+        background: #e8eaed;
+        border-radius: 2px;
+        overflow: hidden;
+        margin: 16px 0;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: #1a73e8;
+        width: 0%;
+        transition: width 0.3s ease;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">Private Documents</h1>
+        <button class="btn btn-primary" onclick="showNoteForm()">
+            <span class="material-icons">add</span>
+            New Note
+        </button>
+    </div>
+
+    <!-- Upload Area -->
+    <div class="upload-area" onclick="document.getElementById('fileInput').click()" 
+         ondrop="handleDrop(event)" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)">
+        <div class="upload-icon material-icons">cloud_upload</div>
+        <div class="upload-text">Click to upload or drag and drop</div>
+        <div class="upload-subtext">Supports PDF, DOC, DOCX, TXT, MD files (max 16MB)</div>
+        <input type="file" id="fileInput" class="file-input" multiple accept=".pdf,.doc,.docx,.txt,.md" onchange="uploadFiles(this.files)">
+    </div>
+
+    <div class="progress-bar hidden" id="uploadProgress">
+        <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <!-- Note Form -->
+    <div class="note-form hidden" id="noteForm">
+        <div class="form-row">
+            <input type="text" id="noteTitle" class="form-input" placeholder="Note title" style="flex: 1;">
+            <button class="btn btn-primary" onclick="saveNote()">Save</button>
+            <button class="btn btn-secondary" onclick="hideNoteForm()">Cancel</button>
+        </div>
+        <textarea id="noteContent" class="form-input form-textarea" placeholder="Write your note here..." rows="6"></textarea>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <button class="tab active" onclick="switchTab('documents')">Documents</button>
+        <button class="tab" onclick="switchTab('notes')">Notes</button>
+    </div>
+
+    <!-- Documents Tab -->
+    <div class="tab-content active" id="documentsTab">
+        <div class="documents-grid" id="documentsGrid">
+            {% if documents %}
+                {% for doc in documents %}
+                <div class="document-card" onclick="viewDocument({{ doc.id }})">
+                    <div class="document-header">
+                        <div style="display: flex; align-items: center; flex: 1; min-width: 0;">
+                            <span class="document-icon material-icons">description</span>
+                            <span class="document-title">{{ doc.original_filename }}</span>
+                        </div>
+                        <div class="document-menu">
+                            <button class="document-menu-btn" onclick="event.stopPropagation(); toggleDocumentMenu(this)">
+                                <span class="material-icons">more_vert</span>
+                            </button>
+                            <div class="document-menu-content">
+                                <div class="document-menu-item" onclick="event.stopPropagation(); viewDocument({{ doc.id }})">View</div>
+                                <div class="document-menu-item" onclick="event.stopPropagation(); downloadDocument({{ doc.id }})">Download</div>
+                                <div class="document-menu-item danger" onclick="event.stopPropagation(); deleteDocument({{ doc.id }})">Delete</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="document-meta">
+                        Uploaded {{ doc.created_at.strftime('%b %d, %Y at %I:%M %p') }}
+                    </div>
+                    <div class="document-preview">
+                        {{ doc.content[:200] }}{% if doc.content|length > 200 %}...{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <div class="material-icons">folder_open</div>
+                    <h3>No documents yet</h3>
+                    <p>Upload your first document to get started</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Notes Tab -->
+    <div class="tab-content" id="notesTab">
+        <div class="documents-grid" id="notesGrid">
+            {% if notes %}
+                {% for note in notes %}
+                <div class="document-card" onclick="editNote({{ note.id }}, '{{ note.title }}', {{ note.content|tojson }})">
+                    <div class="document-header">
+                        <div style="display: flex; align-items: center; flex: 1; min-width: 0;">
+                            <span class="document-icon material-icons">note</span>
+                            <span class="document-title">{{ note.title }}</span>
+                        </div>
+                        <div class="document-menu">
+                            <button class="document-menu-btn" onclick="event.stopPropagation(); toggleDocumentMenu(this)">
+                                <span class="material-icons">more_vert</span>
+                            </button>
+                            <div class="document-menu-content">
+                                <div class="document-menu-item" onclick="event.stopPropagation(); editNote({{ note.id }}, '{{ note.title }}', {{ note.content|tojson }})">Edit</div>
+                                <div class="document-menu-item danger" onclick="event.stopPropagation(); deleteNote({{ note.id }})">Delete</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="document-meta">
+                        {% if note.updated_at != note.created_at %}
+                            Updated {{ note.updated_at.strftime('%b %d, %Y at %I:%M %p') }}
+                        {% else %}
+                            Created {{ note.created_at.strftime('%b %d, %Y at %I:%M %p') }}
+                        {% endif %}
+                    </div>
+                    <div class="document-preview">
+                        {{ note.content[:200] }}{% if note.content|length > 200 %}...{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state" style="grid-column: 1 / -1;">
+                    <div class="material-icons">note_add</div>
+                    <h3>No notes yet</h3>
+                    <p>Create your first note to get started</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Document View Modal -->
+<div class="modal" id="documentModal">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <div id="documentContent"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentNoteId = null;
+
+function switchTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+    event.target.classList.add('active');
+    
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+    document.getElementById(tabName + 'Tab').classList.add('active');
+}
+
+function showNoteForm() {
+    document.getElementById('noteForm').classList.remove('hidden');
+    document.getElementById('noteTitle').value = '';
+    document.getElementById('noteContent').value = '';
+    currentNoteId = null;
+}
+
+function hideNoteForm() {
+    document.getElementById('noteForm').classList.add('hidden');
+    currentNoteId = null;
+}
+
+function editNote(noteId, title, content) {
+    showNoteForm();
+    document.getElementById('noteTitle').value = title;
+    document.getElementById('noteContent').value = content;
+    currentNoteId = noteId;
+}
+
+function handleDragOver(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add('dragover');
+}
+
+function handleDragLeave(e) {
+    e.currentTarget.classList.remove('dragover');
+}
+
+function handleDrop(e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove('dragover');
+    const files = e.dataTransfer.files;
+    uploadFiles(files);
+}
+
+function uploadFiles(files) {
+    if (files.length === 0) return;
+    
+    const progressBar = document.getElementById('uploadProgress');
+    const progressFill = document.getElementById('progressFill');
+    
+    progressBar.classList.remove('hidden');
+    progressFill.style.width = '0%';
+    
+    const formData = new FormData();
+    
+    for (let file of files) {
+        formData.append('file', file);
+    }
+    formData.append('is_shared', 'false');
+    
+    fetch('/upload_document', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        progressFill.style.width = '100%';
+        setTimeout(() => {
+            progressBar.classList.add('hidden');
+            if (data.error) {
+                showAlert(data.error, 'error');
+            } else {
+                showAlert(data.message, 'success');
+                location.reload();
+            }
+        }, 500);
+    })
+    .catch(error => {
+        progressBar.classList.add('hidden');
+        showAlert('Upload failed: ' + error.message, 'error');
+    });
+}
+
+function saveNote() {
+    const title = document.getElementById('noteTitle').value.trim();
+    const content = document.getElementById('noteContent').value.trim();
+    
+    if (!title || !content) {
+        showAlert('Please fill in both title and content', 'error');
+        return;
+    }
+    
+    const data = {
+        title: title,
+        content: content,
+        is_shared: false
+    };
+    
+    if (currentNoteId) {
+        data.note_id = currentNoteId;
+    }
+    
+    fetch('/save_note', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showAlert(data.error, 'error');
+        } else {
+            showAlert(data.message, 'success');
+            hideNoteForm();
+            location.reload();
+        }
+    })
+    .catch(error => {
+        showAlert('Failed to save note: ' + error.message, 'error');
+    });
+}
+
+function deleteDocument(docId) {
+    if (!confirm('Are you sure you want to delete this document?')) return;
+    
+    fetch(`/delete_document/${docId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showAlert(data.error, 'error');
+        } else {
+            showAlert(data.message, 'success');
+            location.reload();
+        }
+    })
+    .catch(error => {
+        showAlert('Failed to delete document: ' + error.message, 'error');
+    });
+}
+
+function deleteNote(noteId) {
+    if (!confirm('Are you sure you want to delete this note?')) return;
+    
+    fetch(`/delete_note/${noteId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showAlert(data.error, 'error');
+        } else {
+            showAlert(data.message, 'success');
+            location.reload();
+        }
+    })
+    .catch(error => {
+        showAlert('Failed to delete note: ' + error.message, 'error');
+    });
+}
+
+function viewDocument(docId) {
+    window.open(`/view_document/${docId}`, '_blank');
+}
+
+function downloadDocument(docId) {
+    window.open(`/download_document/${docId}`, '_blank');
+}
+
+function toggleDocumentMenu(btn) {
+    const menu = btn.closest('.document-menu');
+    const isOpen = menu.classList.contains('open');
+    
+    // Close all menus
+    document.querySelectorAll('.document-menu').forEach(m => m.classList.remove('open'));
+    
+    // Toggle current menu
+    if (!isOpen) {
+        menu.classList.add('open');
+    }
+}
+
+function closeModal() {
+    document.getElementById('documentModal').classList.remove('show');
+}
+
+// Close menus when clicking outside
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.document-menu')) {
+        document.querySelectorAll('.document-menu').forEach(m => m.classList.remove('open'));
+    }
+});
+
+// Close modal when clicking outside
+document.getElementById('documentModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeModal();
+    }
+});
+</script>
+{% endblock %}

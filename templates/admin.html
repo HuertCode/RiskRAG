@@ -1,0 +1,379 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Panel - RISK Knowledge Base{% endblock %}
+
+{% block extra_css %}
+<style>
+    .users-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+
+    .users-table th,
+    .users-table td {
+        padding: 16px;
+        text-align: left;
+        border-bottom: 1px solid #e8eaed;
+    }
+
+    .users-table th {
+        background: #f8f9fa;
+        font-weight: 500;
+        color: #3c4043;
+        font-size: 14px;
+    }
+
+    .users-table td {
+        color: #202124;
+    }
+
+    .users-table tr:hover {
+        background: #f8f9fa;
+    }
+
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #1a73e8;
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 500;
+        margin-right: 12px;
+    }
+
+    .user-info {
+        display: flex;
+        align-items: center;
+    }
+
+    .user-details h4 {
+        margin: 0;
+        font-size: 16px;
+        font-weight: 500;
+        color: #202124;
+    }
+
+    .user-details p {
+        margin: 0;
+        font-size: 14px;
+        color: #5f6368;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+        text-transform: uppercase;
+    }
+
+    .badge-admin {
+        background: #e8f0fe;
+        color: #1a73e8;
+    }
+
+    .badge-user {
+        background: #f8f9fa;
+        color: #5f6368;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+    }
+
+    .btn-small {
+        padding: 6px 12px;
+        font-size: 12px;
+        border-radius: 4px;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
+        margin-bottom: 32px;
+    }
+
+    .stat-card {
+        background: white;
+        border-radius: 8px;
+        padding: 24px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 32px;
+        font-weight: 500;
+        color: #1a73e8;
+        margin-bottom: 8px;
+    }
+
+    .stat-label {
+        font-size: 14px;
+        color: #5f6368;
+        font-weight: 500;
+    }
+
+    .stat-icon {
+        font-size: 48px;
+        color: #dadce0;
+        margin-bottom: 16px;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        color: #5f6368;
+    }
+
+    .empty-state .material-icons {
+        font-size: 72px;
+        color: #dadce0;
+        margin-bottom: 16px;
+    }
+
+    .admin-protected {
+        background: #fce8e6;
+        color: #c5221f;
+        padding: 8px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .confirmation-dialog {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+    }
+
+    .confirmation-dialog.show {
+        display: flex;
+    }
+
+    .confirmation-content {
+        background: white;
+        border-radius: 8px;
+        padding: 24px;
+        max-width: 400px;
+        margin: 20px;
+    }
+
+    .confirmation-title {
+        font-size: 18px;
+        font-weight: 500;
+        color: #202124;
+        margin-bottom: 16px;
+    }
+
+    .confirmation-message {
+        color: #5f6368;
+        margin-bottom: 24px;
+        line-height: 1.5;
+    }
+
+    .confirmation-buttons {
+        display: flex;
+        gap: 12px;
+        justify-content: flex-end;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Statistics -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-icon material-icons">people</div>
+        <div class="stat-value">{{ users|length }}</div>
+        <div class="stat-label">Total Users</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon material-icons">admin_panel_settings</div>
+        <div class="stat-value">{{ users|selectattr('is_admin')|list|length }}</div>
+        <div class="stat-label">Administrators</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon material-icons">description</div>
+        <div class="stat-value">{{ users|sum(attribute='documents')|list|length }}</div>
+        <div class="stat-label">Total Documents</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon material-icons">note</div>
+        <div class="stat-value">{{ users|sum(attribute='notes')|list|length }}</div>
+        <div class="stat-label">Total Notes</div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <h1 class="card-title">User Management</h1>
+        <p style="color: #5f6368; margin: 0;">Manage user accounts and permissions</p>
+    </div>
+
+    {% if users %}
+    <table class="users-table">
+        <thead>
+            <tr>
+                <th>User</th>
+                <th>Role</th>
+                <th>Documents</th>
+                <th>Notes</th>
+                <th>Joined</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td>
+                    <div class="user-info">
+                        <div class="user-avatar">{{ user.username[0].upper() }}</div>
+                        <div class="user-details">
+                            <h4>{{ user.username }}</h4>
+                            <p>{{ user.email }}</p>
+                        </div>
+                    </div>
+                </td>
+                <td>
+                    {% if user.is_admin %}
+                        <span class="badge badge-admin">Administrator</span>
+                    {% else %}
+                        <span class="badge badge-user">User</span>
+                    {% endif %}
+                </td>
+                <td>{{ user.documents|length }}</td>
+                <td>{{ user.notes|length }}</td>
+                <td>{{ user.created_at.strftime('%b %d, %Y') }}</td>
+                <td>
+                    <div class="action-buttons">
+                        {% if user.username != 'admin' %}
+                            <button class="btn btn-secondary btn-small" 
+                                    onclick="toggleAdminStatus({{ user.id }}, {{ user.is_admin|tojson }})">
+                                {% if user.is_admin %}Remove Admin{% else %}Make Admin{% endif %}
+                            </button>
+                            <button class="btn btn-danger btn-small" 
+                                    onclick="showDeleteConfirmation({{ user.id }}, '{{ user.username }}')">
+                                Delete
+                            </button>
+                        {% else %}
+                            <span class="admin-protected">Protected</span>
+                        {% endif %}
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+        <div class="material-icons">people</div>
+        <h3>No users found</h3>
+        <p>There are no users in the system</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Confirmation Dialog -->
+<div class="confirmation-dialog" id="deleteConfirmation">
+    <div class="confirmation-content">
+        <h3 class="confirmation-title">Delete User</h3>
+        <p class="confirmation-message" id="deleteMessage"></p>
+        <div class="confirmation-buttons">
+            <button class="btn btn-secondary" onclick="hideDeleteConfirmation()">Cancel</button>
+            <button class="btn btn-danger" id="confirmDeleteBtn">Delete User</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let deleteUserId = null;
+
+function toggleAdminStatus(userId, isCurrentlyAdmin) {
+    const action = isCurrentlyAdmin ? 'remove admin privileges from' : 'grant admin privileges to';
+    
+    if (!confirm(`Are you sure you want to ${action} this user?`)) {
+        return;
+    }
+    
+    fetch(`/admin/toggle_admin/${userId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showAlert(data.error, 'error');
+        } else {
+            showAlert(data.message, 'success');
+            location.reload();
+        }
+    })
+    .catch(error => {
+        showAlert('Failed to update user: ' + error.message, 'error');
+    });
+}
+
+function showDeleteConfirmation(userId, username) {
+    deleteUserId = userId;
+    document.getElementById('deleteMessage').textContent = 
+        `Are you sure you want to delete user "${username}"? This will permanently delete their account and all associated documents and notes. This action cannot be undone.`;
+    
+    document.getElementById('confirmDeleteBtn').onclick = function() {
+        deleteUser(deleteUserId);
+    };
+    
+    document.getElementById('deleteConfirmation').classList.add('show');
+}
+
+function hideDeleteConfirmation() {
+    document.getElementById('deleteConfirmation').classList.remove('show');
+    deleteUserId = null;
+}
+
+function deleteUser(userId) {
+    fetch(`/admin/delete_user/${userId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        hideDeleteConfirmation();
+        if (data.error) {
+            showAlert(data.error, 'error');
+        } else {
+            showAlert(data.message, 'success');
+            location.reload();
+        }
+    })
+    .catch(error => {
+        hideDeleteConfirmation();
+        showAlert('Failed to delete user: ' + error.message, 'error');
+    });
+}
+
+// Close confirmation dialog when clicking outside
+document.getElementById('deleteConfirmation').addEventListener('click', function(e) {
+    if (e.target === this) {
+        hideDeleteConfirmation();
+    }
+});
+</script>
+{% endblock %}
