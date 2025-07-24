@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, session, make_response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from flask_wtf import FlaskForm
@@ -12,6 +12,8 @@ from wtforms import StringField, PasswordField, SubmitField, TextAreaField, File
 from wtforms.validators import InputRequired, Length, ValidationError
 from dotenv import load_dotenv
 import PyPDF2
+import pdfplumber
+import fitz  # PyMuPDF
 import docx
 import markdown
 import bleach
@@ -78,6 +80,24 @@ class Note(db.Model):
     
     user = db.relationship('User', backref=db.backref('notes', lazy=True))
 
+class Chat(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    user = db.relationship('User', backref=db.backref('chats', lazy=True))
+    messages = db.relationship('ChatMessage', backref='chat', lazy=True, cascade='all, delete-orphan')
+
+class ChatMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chat.id'), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    is_user = db.Column(db.Boolean, default=False)  # True for user message, False for AI response
+    citations = db.Column(db.Text)  # JSON string of citations
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -120,31 +140,128 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 def extract_text_from_file(file_path, filename):
-    """Extract text content from uploaded files"""
+    """Extract text content from uploaded files with improved formatting preservation"""
     text = ""
     file_ext = filename.rsplit('.', 1)[1].lower()
     
     try:
         if file_ext == 'txt' or file_ext == 'md':
-            with open(file_path, 'r', encoding='utf-8') as f:
-                text = f.read()
-                if file_ext == 'md':
-                    text = markdown.markdown(text)
-                    text = bleach.clean(text, strip=True)
+            # Try different encodings for text files
+            encodings = ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']
+            for encoding in encodings:
+                try:
+                    with open(file_path, 'r', encoding=encoding) as f:
+                        text = f.read()
+                        if file_ext == 'md':
+                            text = markdown.markdown(text)
+                            text = bleach.clean(text, strip=True)
+                        break
+                except UnicodeDecodeError:
+                    continue
+            else:
+                # If all encodings fail, try with error handling
+                with open(file_path, 'r', encoding='utf-8', errors='replace') as f:
+                    text = f.read()
+                    if file_ext == 'md':
+                        text = markdown.markdown(text)
+                        text = bleach.clean(text, strip=True)
+                        
         elif file_ext == 'pdf':
-            with open(file_path, 'rb') as f:
-                pdf_reader = PyPDF2.PdfReader(f)
-                for page in pdf_reader.pages:
-                    text += page.extract_text() + "\n"
+            # Try multiple PDF extraction methods for better results
+            text = extract_pdf_text_improved(file_path)
+            
         elif file_ext in ['doc', 'docx']:
             doc = docx.Document(file_path)
             for paragraph in doc.paragraphs:
-                text += paragraph.text + "\n"
+                if paragraph.text.strip():
+                    text += paragraph.text + "\n"
+                    
     except Exception as e:
         print(f"Error extracting text from {filename}: {str(e)}")
         text = f"Error reading file: {str(e)}"
     
+    # Clean up the extracted text
+    text = clean_extracted_text(text)
     return text
+
+def extract_pdf_text_improved(file_path):
+    """Extract text from PDF using multiple methods for better results"""
+    text = ""
+    
+    # Method 1: Try pdfplumber (best for preserving formatting)
+    try:
+        with pdfplumber.open(file_path) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n\n"
+        if text.strip():
+            return text
+    except Exception as e:
+        print(f"pdfplumber failed: {str(e)}")
+    
+    # Method 2: Try PyMuPDF (good for complex PDFs)
+    try:
+        doc = fitz.open(file_path)
+        for page in doc:
+            page_text = page.get_text()
+            if page_text:
+                text += page_text + "\n\n"
+        doc.close()
+        if text.strip():
+            return text
+    except Exception as e:
+        print(f"PyMuPDF failed: {str(e)}")
+    
+    # Method 3: Fallback to PyPDF2
+    try:
+        with open(file_path, 'rb') as f:
+            pdf_reader = PyPDF2.PdfReader(f)
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text += page_text + "\n"
+    except Exception as e:
+        print(f"PyPDF2 failed: {str(e)}")
+    
+    return text
+
+def clean_extracted_text(text):
+    """Clean and normalize extracted text"""
+    if not text:
+        return ""
+    
+    # Remove excessive whitespace while preserving paragraph breaks
+    lines = text.split('\n')
+    cleaned_lines = []
+    
+    for line in lines:
+        # Clean each line
+        cleaned_line = line.strip()
+        
+        # Remove common PDF artifacts
+        cleaned_line = cleaned_line.replace('\x00', '')  # Null bytes
+        cleaned_line = cleaned_line.replace('\x0c', '')  # Form feed
+        cleaned_line = cleaned_line.replace('\x0b', '')  # Vertical tab
+        
+        # Normalize multiple spaces to single space
+        cleaned_line = ' '.join(cleaned_line.split())
+        
+        if cleaned_line:
+            cleaned_lines.append(cleaned_line)
+        else:
+            # Preserve paragraph breaks
+            if cleaned_lines and cleaned_lines[-1] != '':
+                cleaned_lines.append('')
+    
+    # Join lines and clean up multiple paragraph breaks
+    result = '\n'.join(cleaned_lines)
+    
+    # Remove excessive blank lines (more than 2 consecutive)
+    import re
+    result = re.sub(r'\n{3,}', '\n\n', result)
+    
+    return result.strip()
 
 # Routes
 @app.route('/')
@@ -212,7 +329,73 @@ def shared_documents():
 @app.route('/ask_me')
 @login_required
 def ask_me():
-    return render_template('ask_me.html')
+    # Get user's chats
+    chats = Chat.query.filter_by(user_id=current_user.id).order_by(Chat.updated_at.desc()).all()
+    return render_template('ask_me.html', chats=chats)
+
+@app.route('/chat/<int:chat_id>')
+@login_required
+def get_chat(chat_id):
+    """Get chat messages for a specific chat"""
+    chat = Chat.query.filter_by(id=chat_id, user_id=current_user.id).first_or_404()
+    
+    messages = []
+    for msg in chat.messages:
+        citations = json.loads(msg.citations) if msg.citations else []
+        messages.append({
+            'id': msg.id,
+            'content': msg.content,
+            'is_user': msg.is_user,
+            'citations': citations,
+            'created_at': msg.created_at.isoformat()
+        })
+    
+    return jsonify({
+        'chat_id': chat.id,
+        'title': chat.title,
+        'messages': messages
+    })
+
+@app.route('/chat', methods=['POST'])
+@login_required
+def create_chat():
+    """Create a new chat"""
+    data = request.get_json()
+    title = data.get('title', 'New Chat')
+    
+    chat = Chat(title=title, user_id=current_user.id)
+    db.session.add(chat)
+    db.session.commit()
+    
+    return jsonify({
+        'id': chat.id,
+        'title': chat.title,
+        'created_at': chat.created_at.isoformat()
+    })
+
+@app.route('/chat/<int:chat_id>', methods=['DELETE'])
+@login_required
+def delete_chat(chat_id):
+    """Delete a chat"""
+    chat = Chat.query.filter_by(id=chat_id, user_id=current_user.id).first_or_404()
+    db.session.delete(chat)
+    db.session.commit()
+    
+    return jsonify({'message': 'Chat deleted successfully'})
+
+@app.route('/chat/<int:chat_id>/title', methods=['PUT'])
+@login_required
+def update_chat_title(chat_id):
+    """Update chat title"""
+    chat = Chat.query.filter_by(id=chat_id, user_id=current_user.id).first_or_404()
+    data = request.get_json()
+    title = data.get('title', 'New Chat')
+    
+    chat.title = title
+    chat.updated_at = datetime.utcnow()
+    db.session.commit()
+    
+    return jsonify({'message': 'Chat title updated successfully'})
 
 @app.route('/admin')
 @login_required
@@ -220,8 +403,21 @@ def admin():
     if not current_user.is_admin:
         flash('Access denied. Admin privileges required.')
         return redirect(url_for('private_documents'))
+    
     users = User.query.all()
-    return render_template('admin.html', users=users)
+    
+    # Calculate statistics
+    total_users = len(users)
+    total_admins = sum(1 for user in users if user.is_admin)
+    total_documents = sum(len(user.documents) for user in users)
+    total_notes = sum(len(user.notes) for user in users)
+    
+    return render_template('admin.html', 
+                         users=users, 
+                         total_users=total_users,
+                         total_admins=total_admins,
+                         total_documents=total_documents,
+                         total_notes=total_notes)
 
 @app.route('/upload_document', methods=['POST'])
 @login_required
@@ -370,7 +566,54 @@ def download_document(doc_id):
         flash('Access denied')
         return redirect(url_for('private_documents'))
     
-    return send_file(document.file_path, as_attachment=True, download_name=document.original_filename)
+    # Check if it's a PDF and if inline viewing is requested
+    is_pdf = document.original_filename.lower().endswith('.pdf')
+    inline = request.args.get('inline', 'false').lower() == 'true'
+    
+    if is_pdf and inline:
+        # Serve PDF for inline viewing
+        return send_file(
+            document.file_path, 
+            mimetype='application/pdf',
+            as_attachment=False
+        )
+    else:
+        # Download the file
+        return send_file(
+            document.file_path, 
+            as_attachment=True, 
+            download_name=document.original_filename
+        )
+
+@app.route('/get_pdf_data/<int:doc_id>')
+@login_required
+def get_pdf_data(doc_id):
+    """Get PDF data as base64 for inline viewing"""
+    document = Document.query.get_or_404(doc_id)
+    
+    # Check permissions
+    if not document.is_shared and document.user_id != current_user.id:
+        return jsonify({'error': 'Access denied'}), 403
+    
+    # Check if it's a PDF
+    if not document.original_filename.lower().endswith('.pdf'):
+        return jsonify({'error': 'Not a PDF file'}), 400
+    
+    try:
+        import base64
+        # Read the PDF file and encode as base64
+        with open(document.file_path, 'rb') as f:
+            pdf_data = f.read()
+        
+        pdf_base64 = base64.b64encode(pdf_data).decode('utf-8')
+        
+        return jsonify({
+            'pdf_data': f'data:application/pdf;base64,{pdf_base64}',
+            'filename': document.original_filename
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error reading PDF: {str(e)}'}), 500
 
 @app.route('/ask_question', methods=['POST'])
 @login_required
@@ -378,9 +621,22 @@ def ask_question():
     data = request.get_json()
     question = data.get('question')
     private_mode = data.get('private_mode', False)
+    chat_id = data.get('chat_id')
     
     if not question:
         return jsonify({'error': 'Question is required'}), 400
+    
+    # Get or create chat
+    if chat_id:
+        chat = Chat.query.filter_by(id=chat_id, user_id=current_user.id).first()
+        if not chat:
+            return jsonify({'error': 'Chat not found'}), 404
+    else:
+        # Create new chat if none specified
+        chat = Chat(title="New Chat", user_id=current_user.id)
+        db.session.add(chat)
+        db.session.commit()
+        chat_id = chat.id
     
     # Get relevant documents based on mode
     if private_mode:
@@ -397,10 +653,176 @@ def ask_question():
     # Get answer from RAG system
     answer, citations = rag_system.get_answer(question, doc_ids)
     
+    # Save user message
+    user_message = ChatMessage(
+        chat_id=chat_id,
+        content=question,
+        is_user=True,
+        citations=None
+    )
+    db.session.add(user_message)
+    
+    # Save AI response
+    ai_message = ChatMessage(
+        chat_id=chat_id,
+        content=answer,
+        is_user=False,
+        citations=json.dumps(citations) if citations else None
+    )
+    db.session.add(ai_message)
+    
+    # Update chat timestamp
+    chat.updated_at = datetime.utcnow()
+    
+    # Generate or update chat title based on conversation
+    new_title = generate_chat_title(chat)
+    if new_title and new_title != chat.title:
+        chat.title = new_title
+    
+    db.session.commit()
+    
     return jsonify({
         'answer': answer,
-        'citations': citations
+        'citations': citations,
+        'chat_id': chat_id,
+        'chat_title': chat.title
     })
+
+def generate_chat_title(chat):
+    """Generate a short, descriptive title for a chat based on its messages"""
+    # Get all messages in the chat
+    messages = ChatMessage.query.filter_by(chat_id=chat.id).order_by(ChatMessage.created_at.asc()).all()
+    
+    if not messages:
+        return "New Chat"
+    
+    # Extract user questions (first few messages)
+    user_messages = [msg.content for msg in messages if msg.is_user][:3]
+    
+    if not user_messages:
+        return "New Chat"
+    
+    # Combine user questions for context
+    combined_text = " ".join(user_messages)
+    
+    # Clean and prepare text for summarization
+    cleaned_text = clean_text_for_title(combined_text)
+    
+    # Generate title using different strategies
+    title = generate_title_from_text(cleaned_text)
+    
+    return title
+
+def clean_text_for_title(text):
+    """Clean text for title generation"""
+    import re
+    
+    # Remove extra whitespace
+    text = re.sub(r'\s+', ' ', text.strip())
+    
+    # Remove common prefixes
+    prefixes_to_remove = [
+        'what is', 'what are', 'how to', 'can you', 'could you', 'please',
+        'i want to know', 'tell me', 'explain', 'describe', 'show me'
+    ]
+    
+    for prefix in prefixes_to_remove:
+        if text.lower().startswith(prefix):
+            text = text[len(prefix):].strip()
+    
+    # Remove punctuation at the end
+    text = re.sub(r'[?!.,;:]$', '', text)
+    
+    return text
+
+def generate_title_from_text(text):
+    """Generate a short title from text using multiple strategies"""
+    if not text:
+        return "New Chat"
+    
+    # Strategy 1: Use first meaningful sentence (up to 40 chars)
+    words = text.split()
+    if len(words) <= 6:
+        # Short text, use as is (truncated)
+        title = text[:40]
+        if len(text) > 40:
+            title = title.rsplit(' ', 1)[0] + "..."
+        return title
+    
+    # Strategy 2: Extract key topics
+    key_topics = extract_key_topics(text)
+    if key_topics:
+        return key_topics
+    
+    # Strategy 3: Use first sentence with smart truncation
+    first_sentence = text.split('.')[0].strip()
+    if len(first_sentence) <= 40:
+        return first_sentence
+    
+    # Strategy 4: Truncate intelligently
+    title = text[:40]
+    if len(text) > 40:
+        # Try to break at word boundary
+        last_space = title.rfind(' ')
+        if last_space > 25:  # If we can break at a reasonable point
+            title = title[:last_space] + "..."
+        else:
+            title = title + "..."
+    
+    return title
+
+def extract_key_topics(text):
+    """Extract key topics from text for title generation"""
+    import re
+    
+    # Common business/risk topics
+    topics = {
+        'risk': ['risk', 'risks', 'risk management', 'risk assessment'],
+        'compliance': ['compliance', 'regulatory', 'regulation', 'legal'],
+        'security': ['security', 'cybersecurity', 'data protection', 'privacy'],
+        'finance': ['financial', 'finance', 'budget', 'cost', 'revenue'],
+        'operations': ['operational', 'process', 'procedure', 'workflow'],
+        'strategy': ['strategy', 'strategic', 'planning', 'goals'],
+        'technology': ['technology', 'tech', 'software', 'system', 'platform'],
+        'policy': ['policy', 'policies', 'guidelines', 'standards'],
+        'audit': ['audit', 'auditing', 'review', 'assessment'],
+        'training': ['training', 'education', 'learning', 'development']
+    }
+    
+    text_lower = text.lower()
+    
+    # Find matching topics
+    found_topics = []
+    for category, keywords in topics.items():
+        for keyword in keywords:
+            if keyword in text_lower:
+                found_topics.append(category.title())
+                break
+    
+    if found_topics:
+        # Combine topics intelligently
+        if len(found_topics) == 1:
+            return f"{found_topics[0]} Discussion"
+        elif len(found_topics) == 2:
+            return f"{found_topics[0]} & {found_topics[1]}"
+        else:
+            return f"{found_topics[0]} & Related Topics"
+    
+    # If no specific topics found, look for document types
+    doc_types = {
+        'pdf': ['pdf', 'document', 'report'],
+        'policy': ['policy', 'procedure', 'guideline'],
+        'report': ['report', 'analysis', 'review'],
+        'contract': ['contract', 'agreement', 'terms'],
+        'manual': ['manual', 'guide', 'handbook']
+    }
+    
+    for doc_type, keywords in doc_types.items():
+        for keyword in keywords:
+            if keyword in text_lower:
+                return f"{doc_type.title()} Questions"
+    
+    return None
 
 @app.route('/admin/delete_user/<int:user_id>', methods=['DELETE'])
 @login_required
@@ -438,6 +860,97 @@ def admin_toggle_admin(user_id):
     
     return jsonify({'message': f'User admin status updated', 'is_admin': user.is_admin})
 
+@app.route('/admin/reprocess_documents', methods=['POST'])
+@login_required
+def admin_reprocess_documents():
+    """Reprocess all documents with improved text extraction"""
+    if not current_user.is_admin:
+        return jsonify({'error': 'Unauthorized'}), 403
+    
+    try:
+        documents = Document.query.all()
+        processed_count = 0
+        
+        for doc in documents:
+            if os.path.exists(doc.file_path):
+                # Re-extract text with improved method
+                new_content = extract_text_from_file(doc.file_path, doc.original_filename)
+                
+                # Update document content
+                doc.content = new_content
+                doc.updated_at = datetime.utcnow()
+                
+                # Update in RAG system
+                rag_system.remove_document(doc.id)
+                rag_system.add_document(doc.id, new_content, {
+                    'filename': doc.original_filename,
+                    'user_id': doc.user_id,
+                    'is_shared': doc.is_shared,
+                    'created_at': doc.created_at.isoformat()
+                })
+                
+                processed_count += 1
+        
+        db.session.commit()
+        
+        return jsonify({
+            'message': f'Successfully reprocessed {processed_count} documents with improved text extraction',
+            'processed_count': processed_count
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Error reprocessing documents: {str(e)}'}), 500
+
+@app.route('/get_citation_document/<doc_id>')
+@login_required
+def get_citation_document(doc_id):
+    """Get document information for citation viewing"""
+    try:
+        # Check if it's a note (doc_id format: "note_123")
+        if str(doc_id).startswith('note_'):
+            note_id = int(str(doc_id).replace('note_', ''))
+            note = Note.query.get(note_id)
+            if note:
+                # Check permissions
+                if not note.is_shared and note.user_id != current_user.id:
+                    return jsonify({'error': 'Access denied'}), 403
+                
+                return jsonify({
+                    'type': 'note',
+                    'id': note.id,
+                    'filename': note.title,
+                    'is_pdf': False,
+                    'content': note.content,
+                    'view_url': None,
+                    'download_url': None
+                })
+        
+        # Check if it's a regular document
+        try:
+            doc_id_int = int(doc_id)
+            document = Document.query.get(doc_id_int)
+            if document:
+                # Check permissions
+                if not document.is_shared and document.user_id != current_user.id:
+                    return jsonify({'error': 'Access denied'}), 403
+                
+                return jsonify({
+                    'type': 'document',
+                    'id': document.id,
+                    'filename': document.original_filename,
+                    'is_pdf': document.original_filename.lower().endswith('.pdf'),
+                    'content': document.content,
+                    'view_url': url_for('view_document', doc_id=document.id),
+                    'download_url': url_for('download_document', doc_id=document.id)
+                })
+        except ValueError:
+            pass
+        
+        return jsonify({'error': 'Document not found'}), 404
+        
+    except Exception as e:
+        return jsonify({'error': f'Error retrieving document: {str(e)}'}), 500
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
@@ -449,5 +962,28 @@ if __name__ == '__main__':
             admin_user.set_password('admin')
             db.session.add(admin_user)
             db.session.commit()
+        
+        # Reload existing documents into RAG system
+        documents = Document.query.all()
+        for doc in documents:
+            rag_system.add_document(doc.id, doc.content, {
+                'filename': doc.original_filename,
+                'user_id': doc.user_id,
+                'is_shared': doc.is_shared,
+                'created_at': doc.created_at.isoformat()
+            })
+        
+        # Reload existing notes into RAG system
+        notes = Note.query.all()
+        for note in notes:
+            rag_system.add_document(f"note_{note.id}", note.content, {
+                'title': note.title,
+                'type': 'note',
+                'user_id': note.user_id,
+                'is_shared': note.is_shared,
+                'created_at': note.created_at.isoformat()
+            })
+        
+        print(f"Loaded {len(documents)} documents and {len(notes)} notes into RAG system")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)

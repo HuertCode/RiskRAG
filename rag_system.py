@@ -193,7 +193,7 @@ class RAGSystem:
         
         # Prepare context from similar chunks
         context_parts = []
-        citations = []
+        all_citations = []
         
         for i, (doc_id, chunk_text, score, start_pos, end_pos) in enumerate(similar_chunks):
             metadata = self.metadata.get(doc_id, {})
@@ -202,17 +202,19 @@ class RAGSystem:
             context_parts.append(f"[Source {i+1}]: {chunk_text}")
             
             # Prepare citation
+            filename = metadata.get('filename', metadata.get('title', f'Document {doc_id}'))
             citation = {
                 'id': i + 1,
                 'doc_id': doc_id,
-                'filename': metadata.get('filename', metadata.get('title', f'Document {doc_id}')),
+                'filename': filename,
                 'chunk_text': chunk_text,
                 'start_pos': start_pos,
                 'end_pos': end_pos,
                 'score': score,
-                'type': metadata.get('type', 'document')
+                'type': metadata.get('type', 'document'),
+                'is_pdf': filename.lower().endswith('.pdf') if filename else False
             }
-            citations.append(citation)
+            all_citations.append(citation)
         
         context = "\n\n".join(context_parts)
         
@@ -236,7 +238,59 @@ Answer:"""
         # Get answer from DeepSeek
         answer = self.call_deepseek_api(prompt)
         
-        return answer, citations
+        # Extract only the citations that are actually referenced in the answer
+        used_citations = self.extract_used_citations(answer, all_citations)
+        
+        return answer, used_citations
+    
+    def extract_used_citations(self, answer: str, all_citations: List[Dict]) -> List[Dict]:
+        """Extract only the citations that are actually referenced in the answer"""
+        import re
+        
+        # Find all [Source X] references in the answer
+        source_pattern = r'\[Source (\d+)\]'
+        referenced_sources = set()
+        
+        for match in re.finditer(source_pattern, answer):
+            source_num = int(match.group(1))
+            referenced_sources.add(source_num)
+        
+        # Filter citations to only include referenced ones
+        used_citations = []
+        for citation in all_citations:
+            if citation['id'] in referenced_sources:
+                used_citations.append(citation)
+        
+        # If no sources are explicitly referenced but we have citations, 
+        # check if the answer contains content from the citations
+        if not used_citations and all_citations:
+            used_citations = self.find_implicit_citations(answer, all_citations)
+        
+        return used_citations
+    
+    def find_implicit_citations(self, answer: str, all_citations: List[Dict]) -> List[Dict]:
+        """Find citations that are implicitly used based on content similarity"""
+        import re
+        
+        # Clean the answer text
+        answer_clean = re.sub(r'\s+', ' ', answer.lower().strip())
+        
+        used_citations = []
+        for citation in all_citations:
+            # Clean citation text
+            citation_clean = re.sub(r'\s+', ' ', citation['chunk_text'].lower().strip())
+            
+            # Extract key phrases from citation (words longer than 4 characters)
+            citation_words = set(word for word in citation_clean.split() if len(word) > 4)
+            
+            # Check if significant words from citation appear in answer
+            matching_words = sum(1 for word in citation_words if word in answer_clean)
+            
+            # If more than 30% of significant words match, consider it used
+            if len(citation_words) > 0 and matching_words / len(citation_words) > 0.3:
+                used_citations.append(citation)
+        
+        return used_citations
     
     def get_document_info(self, doc_id: str) -> Dict[str, Any]:
         """Get information about a specific document"""

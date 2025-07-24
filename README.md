@@ -1,168 +1,137 @@
-# RISK Knowledge Base
+# RiskRAG - RISK Knowledge Base AI
 
-A Flask-based web application that serves as a knowledge base using RAG (Retrieval-Augmented Generation) technology, powered by the Deepseek API.
+A comprehensive knowledge management and AI-powered question-answering system for RISK company.
 
 ## Features
 
-- **User Authentication**: Registration, login, and password reset functionality
-- **Admin Panel**: User management for administrators  
-- **Private Documents**: Upload and manage personal documents (PDFs, Word docs, text files)
-- **Shared Documents**: Upload documents to share with the entire organization
-- **AI-Powered Q&A**: Ask questions and get answers with citations from documents
-- **Private Mode**: Toggle between private documents and shared documents for answers
-- **Google-Style UI**: Modern, responsive design inspired by Google's Material Design
+### 🤖 AI-Powered Q&A
+- Ask questions about uploaded documents and get intelligent answers
+- Automatic citation generation with source references
+- Support for both shared and private document search
+- Smart citation filtering - only shows sources actually used in answers
 
-## Setup Instructions
+### 📚 Document Management
+- Upload and manage PDF, DOCX, and text documents
+- Support for both private and shared documents
+- Improved PDF text extraction with formatting preservation
+- View original PDF format or extracted text
+- Document categorization and organization
 
-### 1. Prerequisites
-- Python 3.8 or higher
-- Virtual environment (recommended)
+### 💬 Chat Management System
+- **Multiple Chats**: Create and manage multiple conversation threads
+- **Automatic Title Generation**: Chat titles are automatically generated based on conversation content
+- **Chat History**: All conversations are persistently saved
+- **Smart Summarization**: Titles are short and descriptive (max 40 characters)
+- **Topic Detection**: Automatically identifies business topics like Risk, Compliance, Security, etc.
 
-### 2. Installation
+### 👥 User Management
+- User registration and authentication
+- Role-based access control (Admin/User)
+- Private document isolation
+- Admin panel for user management
 
-1. Clone or download the project files
-2. Create a virtual environment:
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
+### 📊 Admin Features
+- User management and statistics
+- Document reprocessing capabilities
+- System overview and monitoring
+
+## Chat Title Generation
+
+The system automatically generates descriptive chat titles based on conversation content:
+
+### Examples:
+- **"What is our risk management policy?"** → **"Risk Management Policy"**
+- **"How do we handle cybersecurity compliance?"** → **"Security & Compliance"**
+- **"Tell me about financial reporting procedures"** → **"Finance Discussion"**
+- **"What are the audit requirements?"** → **"Audit Discussion"**
+
+### Title Generation Strategies:
+1. **Topic Detection**: Identifies business topics (Risk, Compliance, Security, Finance, etc.)
+2. **Smart Truncation**: Intelligently shortens long questions
+3. **Prefix Removal**: Removes common question prefixes ("What is", "How to", etc.)
+4. **Document Type Recognition**: Identifies document types (Policy, Report, Contract, etc.)
+
+## Installation
+
+1. Clone the repository
+2. Install dependencies: `pip install -r requirements.txt`
+3. Set up environment variables in `.env`:
    ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
+   SECRET_KEY=your_secret_key
+   DEEPSEEK_API_KEY=your_deepseek_api_key
    ```
-
-4. Configure environment variables:
-   - Copy the `.env` file and update the values:
-   ```bash
-   SECRET_KEY=your-secret-key-here-change-this-in-production
-   DEEPSEEK_API_KEY=your-deepseek-api-key-here
-   FLASK_ENV=development
-   FLASK_DEBUG=True
-   ```
-
-### 3. Running the Application
-
-1. Activate your virtual environment:
-   ```bash
-   source venv/bin/activate
-   ```
-
-2. Start the Flask application:
-   ```bash
-   python app.py
-   ```
-
-3. Open your browser and navigate to `http://localhost:5000`
+4. Run the application: `python app.py`
+5. Access at `http://localhost:5001`
 
 ## Usage
 
-### Login
-- **Admin Credentials**: Username: `admin`, Password: `admin`
-- Create new user accounts via the registration page
+### Getting Started
+1. Register an account or login as admin (admin/admin)
+2. Upload documents to your private or shared space
+3. Start asking questions in the "Ask Me" tab
+4. Create new chats for different topics
+5. View citations and source documents
 
-### Tabs Overview
+### Chat Management
+- **New Chat**: Click "New Chat" button or ask a question to auto-create
+- **Switch Chats**: Click any chat in the sidebar to switch
+- **Edit Titles**: Hover over chat and click edit icon
+- **Delete Chats**: Hover over chat and click delete icon
+- **Automatic Titles**: Chat titles update automatically based on conversation
 
-#### 1. Private Documents
-- Upload personal documents (PDF, DOCX, TXT, MD)
-- Create and edit text notes
-- Documents are only visible to you
-- Drag-and-drop file upload support
-
-#### 2. Shared Documents  
-- Upload documents to share with the organization
-- Create shared text notes
-- View documents shared by other users
-- Only edit/delete your own shared documents
-
-#### 3. Ask Me (AI Q&A)
-- Ask questions about your documents
-- **Private Mode OFF**: Answers from all shared documents (default)
-- **Private Mode ON**: Answers only from your private documents
-- Click citations to view source document paragraphs
-- Real-time chat interface
-
-### Admin Features
-- Access via the Admin tab (admin users only)
-- View user statistics
-- Manage user accounts (toggle admin status, delete users)
-- Cannot delete the main admin account
-
-## API Configuration
-
-To use the AI features, you need a Deepseek API key:
-
-1. Sign up at [Deepseek](https://deepseek.com)
-2. Get your API key
-3. Update the `DEEPSEEK_API_KEY` in your `.env` file
-
-## File Structure
-
-```
-├── app.py                 # Main Flask application
-├── rag_system.py         # RAG system implementation
-├── requirements.txt      # Python dependencies
-├── .env                  # Environment variables
-├── templates/            # HTML templates
-│   ├── base.html
-│   ├── login.html
-│   ├── register.html
-│   ├── reset_password.html
-│   ├── private_documents.html
-│   ├── shared_documents.html
-│   ├── ask_me.html
-│   ├── admin.html
-│   └── view_document.html
-├── uploads/              # File upload directories
-│   ├── private/          # Private documents
-│   └── shared/           # Shared documents
-└── instance/             # Database and instance files
-    └── risk_kb.db        # SQLite database
-```
+### Document Viewing
+- **Original PDF**: View documents in their original format
+- **Extracted Text**: View processed text with highlighting
+- **Citations**: Click citation links to view source sections
+- **Dual View**: Toggle between PDF and text views
 
 ## Technical Details
 
-- **Framework**: Flask with SQLAlchemy ORM
-- **Database**: SQLite (development) / PostgreSQL (production ready)
-- **Authentication**: Flask-Login with session management
-- **AI/ML**: Sentence Transformers for embeddings, FAISS for vector search
-- **File Processing**: PyPDF2 (PDF), python-docx (Word), Markdown support
-- **Security**: CSRF protection, password hashing, input sanitization
+### Backend
+- **Flask**: Web framework
+- **SQLAlchemy**: Database ORM
+- **FAISS**: Vector similarity search
+- **Sentence Transformers**: Text embeddings
+- **DeepSeek API**: LLM for answer generation
 
-## Troubleshooting
+### Frontend
+- **HTML/CSS/JavaScript**: Modern responsive interface
+- **Material Icons**: Clean iconography
+- **Real-time Updates**: Live chat title updates
 
-### Common Issues
+### Database Models
+- **User**: User accounts and authentication
+- **Document**: Document storage and metadata
+- **Note**: User-created notes
+- **Chat**: Chat sessions and metadata
+- **ChatMessage**: Individual messages with citations
 
-1. **Permission errors during installation**:
-   ```bash
-   # Use virtual environment
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
+## API Endpoints
 
-2. **Missing system packages (Ubuntu/Debian)**:
-   ```bash
-   sudo apt update
-   sudo apt install python3-venv python3-pip
-   ```
+### Chat Management
+- `POST /chat` - Create new chat
+- `GET /chat/<id>` - Load chat messages
+- `DELETE /chat/<id>` - Delete chat
+- `PUT /chat/<id>/title` - Update chat title
 
-3. **Database issues**:
-   - Delete `instance/risk_kb.db` and restart the app to recreate the database
+### Q&A
+- `POST /ask_question` - Ask question with chat support
+- `GET /get_citation_document/<id>` - Get citation document info
+- `GET /get_pdf_data/<id>` - Get PDF data for inline viewing
 
-4. **File upload issues**:
-   - Ensure `uploads/private/` and `uploads/shared/` directories exist
-   - Check file size limits (default: 16MB)
+### Document Management
+- `POST /upload_document` - Upload new document
+- `GET /download_document/<id>` - Download document
+- `DELETE /delete_document/<id>` - Delete document
 
-## Development
+## Contributing
 
-The application is ready for development and testing. For production deployment:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
-1. Change `SECRET_KEY` to a secure random value
-2. Set `FLASK_ENV=production` and `FLASK_DEBUG=False`
-3. Configure a production database (PostgreSQL recommended)
-4. Set up proper web server (Gunicorn + Nginx)
-5. Configure SSL/HTTPS
+## License
 
-## Support
-
-For questions or issues, please check the troubleshooting section or create an issue in the project repository.
+This project is licensed under the MIT License.

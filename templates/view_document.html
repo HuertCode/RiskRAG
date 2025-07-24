@@ -216,6 +216,48 @@
         font-size: 18px;
     }
 
+    .pdf-viewer-container {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+        overflow: hidden;
+    }
+
+    .view-toggle {
+        display: flex;
+        border-bottom: 1px solid #e8eaed;
+        background: #f8f9fa;
+    }
+
+    .view-toggle .btn {
+        border-radius: 0;
+        border: none;
+        background: transparent;
+        color: #5f6368;
+        padding: 12px 20px;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+
+    .view-toggle .btn:hover {
+        background: #e8eaed;
+        color: #202124;
+    }
+
+    .view-toggle .btn.active {
+        background: white;
+        color: #1a73e8;
+        border-bottom: 2px solid #1a73e8;
+    }
+
+    .pdf-view {
+        padding: 0;
+    }
+
+    .text-view {
+        padding: 32px;
+    }
+
     @media print {
         .document-header,
         .breadcrumb,
@@ -290,6 +332,47 @@
     </div>
 
     <!-- Document Content -->
+    {% if document.original_filename.lower().endswith('.pdf') %}
+    <!-- PDF Viewer -->
+    <div class="pdf-viewer-container">
+        <div class="view-toggle">
+            <button class="btn btn-secondary active" onclick="showPdfView()">
+                <span class="material-icons">picture_as_pdf</span>
+                Original PDF
+            </button>
+            <button class="btn btn-secondary" onclick="showTextView()">
+                <span class="material-icons">article</span>
+                Extracted Text
+            </button>
+        </div>
+        
+        <div id="pdf-view" class="pdf-view">
+            <iframe src="{{ url_for('download_document', doc_id=document.id, inline='true') }}" 
+                    width="100%" 
+                    height="800px" 
+                    style="border: 1px solid #e8eaed; border-radius: 8px;">
+                <p>Your browser doesn't support PDF viewing. 
+                   <a href="{{ url_for('download_document', doc_id=document.id) }}">Download the PDF</a> to view it.
+                </p>
+            </iframe>
+        </div>
+        
+        <div id="text-view" class="text-view" style="display: none;">
+            {% if document.content %}
+            <div class="document-content">
+                {{ document.content|safe }}
+            </div>
+            {% else %}
+            <div class="document-empty">
+                <div class="material-icons">description</div>
+                <h3>No Content</h3>
+                <p>This document appears to be empty or the content could not be extracted.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    {% else %}
+    <!-- Non-PDF Content -->
     {% if document.content %}
     <div class="document-content">
         {{ document.content|safe }}
@@ -300,6 +383,7 @@
         <h3>No Content</h3>
         <p>This document appears to be empty or the content could not be extracted.</p>
     </div>
+    {% endif %}
     {% endif %}
 </div>
 {% endblock %}
@@ -339,5 +423,28 @@ document.addEventListener('keydown', function(e) {
         }
     }
 });
+
+// PDF/Text view switching
+function showPdfView() {
+    document.getElementById('pdf-view').style.display = 'block';
+    document.getElementById('text-view').style.display = 'none';
+    
+    // Update button states
+    document.querySelectorAll('.view-toggle .btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.closest('.btn').classList.add('active');
+}
+
+function showTextView() {
+    document.getElementById('pdf-view').style.display = 'none';
+    document.getElementById('text-view').style.display = 'block';
+    
+    // Update button states
+    document.querySelectorAll('.view-toggle .btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.closest('.btn').classList.add('active');
+}
 </script>
 {% endblock %}

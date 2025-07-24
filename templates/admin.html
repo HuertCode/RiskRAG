@@ -202,22 +202,22 @@
 <div class="stats-grid">
     <div class="stat-card">
         <div class="stat-icon material-icons">people</div>
-        <div class="stat-value">{{ users|length }}</div>
+        <div class="stat-value">{{ total_users }}</div>
         <div class="stat-label">Total Users</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon material-icons">admin_panel_settings</div>
-        <div class="stat-value">{{ users|selectattr('is_admin')|list|length }}</div>
+        <div class="stat-value">{{ total_admins }}</div>
         <div class="stat-label">Administrators</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon material-icons">description</div>
-        <div class="stat-value">{{ users|sum(attribute='documents')|list|length }}</div>
+        <div class="stat-value">{{ total_documents }}</div>
         <div class="stat-label">Total Documents</div>
     </div>
     <div class="stat-card">
         <div class="stat-icon material-icons">note</div>
-        <div class="stat-value">{{ users|sum(attribute='notes')|list|length }}</div>
+        <div class="stat-value">{{ total_notes }}</div>
         <div class="stat-label">Total Notes</div>
     </div>
 </div>
@@ -226,6 +226,19 @@
     <div class="card-header">
         <h1 class="card-title">User Management</h1>
         <p style="color: #5f6368; margin: 0;">Manage user accounts and permissions</p>
+    </div>
+    
+    <div class="card-body" style="padding: 20px;">
+        <div style="margin-bottom: 20px;">
+            <h3 style="margin-bottom: 10px;">Document Management</h3>
+            <button class="btn btn-primary" onclick="reprocessDocuments()">
+                <span class="material-icons" style="margin-right: 8px;">refresh</span>
+                Reprocess All Documents
+            </button>
+            <p style="color: #5f6368; margin-top: 8px; font-size: 14px;">
+                This will re-extract text from all uploaded documents using improved PDF parsing to fix formatting issues.
+            </p>
+        </div>
     </div>
 
     {% if users %}
@@ -375,5 +388,36 @@ document.getElementById('deleteConfirmation').addEventListener('click', function
         hideDeleteConfirmation();
     }
 });
+
+function reprocessDocuments() {
+    if (!confirm('This will reprocess all documents with improved text extraction. This may take a few moments. Continue?')) {
+        return;
+    }
+    
+    const button = event.target.closest('button');
+    const originalText = button.innerHTML;
+    button.innerHTML = '<span class="material-icons" style="margin-right: 8px;">hourglass_empty</span>Processing...';
+    button.disabled = true;
+    
+    fetch('/admin/reprocess_documents', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            showAlert(data.error, 'error');
+        } else {
+            showAlert(data.message, 'success');
+            location.reload();
+        }
+    })
+    .catch(error => {
+        showAlert('Failed to reprocess documents: ' + error.message, 'error');
+    })
+    .finally(() => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
 </script>
 {% endblock %}
